@@ -4,19 +4,21 @@ from telethon import TelegramClient, events, Button
 from telethon.sessions import StringSession
 from telethon.tl.functions.users import GetFullUserRequest
 
-# --- CONFIG ---
+# --- CONFIG FROM KOYEB ---
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 STRING_SESSION = os.getenv("STRING_SESSION")
-OWNER_ID = 8702798367  # 👈 REPLACE WITH YOUR TELEGRAM ID
-PRIVATE_GROUP_ID = -5102493004  # 👈 REPLACE WITH YOUR PRIVATE GROUP ID
+PRIVATE_GROUP_ID = int(os.getenv("PRIVATE_GROUP_ID")) # Get from Koyeb
+
+# --- HARDCODED CONFIG ---
+OWNER_ID = 8702798367 
 
 user_client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 # Temporary storage for user states and language preferences
-user_data = {} # {user_id: {'lang': 'kh', 'state': 'idle', 'report_info': {}}}
+user_data = {} 
 
 def get_text(uid, kh_text, en_text):
     lang = user_data.get(uid, {}).get('lang', 'kh')
@@ -46,7 +48,6 @@ async def handle_messages(event):
     text = event.text
     if uid not in user_data: user_data[uid] = {'lang': 'kh', 'state': 'idle', 'report_info': {}}
 
-    # --- MENU NAVIGATION ---
     if text in ["🔍 ពិនិត្យជនខិលខូច", "🔍 Check Scammer"]:
         user_data[uid]['state'] = 'awaiting_id'
         await event.respond(get_text(uid, "សូមផ្ញើ ID ជនខិលខូចមកកាន់ទីនេះ៖", "Please send the Scammer's ID here:"))
@@ -62,7 +63,6 @@ async def handle_messages(event):
         await event.respond("Select Language / ជ្រើសរើសភាសា", buttons=buttons)
         return
 
-    # --- STATE HANDLING ---
     state = user_data[uid].get('state')
 
     if state == 'awaiting_id' and text.isdigit():
@@ -86,9 +86,7 @@ async def handle_messages(event):
         buttons = [[Button.inline("✅ YES", b"confirm_yes"), Button.inline("❌ NO", b"confirm_no")]]
         await event.respond(get_text(uid, "តើអ្នកប្រាកដថាចង់បញ្ជូនរបាយការណ៍នេះ?", "Are you sure you want to send this report?"), buttons=buttons)
 
-    # --- OWNER COMMANDS ---
     if uid == OWNER_ID and text.startswith(".gent"):
-        # Simple template generator
         parts = text.split()
         size = parts[1] if len(parts) > 1 else "small"
         template = (f"🚨 **NEW SCAMMER ALERT ({size.upper()})**\n"
@@ -109,9 +107,14 @@ async def callbacks(event):
     
     elif data == b"confirm_yes":
         photo = user_data[uid]['report_info'].get('photo')
-        # Send to Private Group
-        await bot.send_message(PRIVATE_GROUP_ID, f"📢 **New Report from {uid}**", file=photo)
-        await event.edit(get_text(uid, "របាយការណ៍ត្រូវបានបញ្ជូន! អរគុណ។", "Report sent! Thank you."))
+        try:
+            # FIX: Force the bot to look for the group peer before sending
+            entity = await bot.get_input_entity(PRIVATE_GROUP_ID)
+            await bot.send_message(entity, f"📢 **New Report from {uid}**", file=photo)
+            await event.edit(get_text(uid, "របាយការណ៍ត្រូវបានបញ្ជូន! អរគុណ។", "Report sent! Thank you."))
+        except Exception as e:
+            print(f"Error: {e}")
+            await event.edit(f"❌ Error: Bot cannot find group {PRIVATE_GROUP_ID}. Make sure Bot is ADMIN there.")
         user_data[uid]['state'] = 'idle'
     
     elif data == b"confirm_no":
